@@ -5,7 +5,7 @@ import numpy as np
 import json
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QFileDialog, QLabel, QListWidget, QFrame, QSplitter, QStackedWidget,
-                             QTextEdit, QLineEdit)
+                             QTextEdit, QLineEdit, QMessageBox)
 from PyQt5.QtGui import QPixmap, QImage, QColor, QPainter, QBrush, QPen
 from PyQt5.QtCore import Qt, QThreadPool
 import easyocr
@@ -107,11 +107,14 @@ class MainWindow(QMainWindow):
         self.current_key_label.setText(f"Current Key: {self.key_of_song}")
 
     def on_section_selected(self, rect):
-        dialog = SectionNameDialog(self)
-        if dialog.exec_():
-            section_name = dialog.get_name()
-            if section_name:
-                self.save_section(section_name, rect)
+        if self.key_of_song:
+            dialog = SectionNameDialog(self)
+            if dialog.exec_():
+                section_name = dialog.get_name()
+                if section_name:
+                    self.save_section(section_name, rect)
+        else:
+            QMessageBox.warning(self, "Warning", "Du hast noch keine Tonart festgelegt. Bitte wähle eine Tonart aus du kek.")
                 
     def save_section(self, name, rect):
         x, y, w, h = rect.getRect()
