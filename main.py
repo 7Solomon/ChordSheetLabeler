@@ -5,7 +5,7 @@ import numpy as np
 import json
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QFileDialog, QLabel, QListWidget, QFrame, QSplitter, QStackedWidget,
-                             QTextEdit, QLineEdit, QMessageBox)
+                             QTextEdit, QLineEdit, QMessageBox, QScrollArea)
 from PyQt5.QtGui import QPixmap, QImage, QColor, QPainter, QBrush, QPen
 from PyQt5.QtCore import Qt, QThreadPool
 import easyocr
@@ -34,10 +34,14 @@ class MainWindow(QMainWindow):
         self.main_page = QWidget()
         self.main_layout = QHBoxLayout(self.main_page)
         self.central_widget.addWidget(self.main_page)
+        
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
 
         self.image_label = ImageLabel(self)
         self.image_label.section_selected.connect(self.on_section_selected)
-        self.main_layout.addWidget(self.image_label)
+        self.scroll_area.setWidget(self.image_label)
+        self.main_layout.addWidget(self.scroll_area)
 
         self.key_of_song = None
         self.song_name = None
@@ -80,7 +84,7 @@ class MainWindow(QMainWindow):
 
         # Section Data Overview
         self.section_data_overview = QTextEdit()
-        self.section_data_overview.setReadOnly(True)
+        self.section_data_overview.setReadOnly(False)
         self.right_panel_layout.addWidget(self.section_data_overview)
 
         self.image = None
