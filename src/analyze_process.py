@@ -16,7 +16,7 @@ def convert_chord_to_nashV(chord: str, key: str) -> str:
     This handles extended chords like F#m7, Cmaj7, B7 by focusing on the base chord.
     """
     # Load Nashville system from a JSON file or define it as a dict here
-    nashville_system = json.load(open("nashville_system.json"))
+    nashville_system = json.load(open("assets/nashville_system.json"))     # HERE PATH MAYBE FOR EXE SHOULD BE CHANGED
 
     # Ensure the key exists in the Nashville system
     if key not in nashville_system:

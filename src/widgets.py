@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from pdf2image import convert_from_path
 
-from analyze_process import process_ocr_result
+from src.analyze_process import process_ocr_result
 
 class OCRWorker(QThread):
     finished = pyqtSignal(str, tuple)

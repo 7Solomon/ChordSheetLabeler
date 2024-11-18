@@ -12,7 +12,7 @@ import easyocr
 from pdf2image import convert_from_path
 
 # Import your custom widget classes
-from widgets import OCRWorker, SectionNameDialog, KeyOfSongWidget, ImageLabel, SelectImagePage
+from src.widgets import OCRWorker, SectionNameDialog, KeyOfSongWidget, ImageLabel, SelectImagePage
 
 
 class MainWindow(QMainWindow):
