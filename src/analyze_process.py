@@ -4,11 +4,11 @@ from typing import List, Dict, Tuple
 
 def is_chord(text: str) -> bool:
     """Check if the text is likely a chord."""
-    basic_chords = {"C",  "D",  "E", "F", "G",  "A", "B", "H"}
+    basic_chords = {"C", "D", "E", "F", "G", "A", "B", "H"}
+    text = text.upper()
     if len(text) > 1: 
-        return len(text)<=4 and any(char in text for char in ["7", "9", "m", "M", "maj", "dim", "aug", "sus", "add", "°", "ø", "b", "#"]) # Ka ob das alle sein müssen aber why not
-    return any(char.isalpha() for char in text) and text in basic_chords
-
+        return len(text) <= 4 and any(char in text for char in ["7", "6", "9", "m", "M", "maj", "dim", "aug", "sus", "add", "°", "ø", "b", "#", "/"])
+    return text in basic_chords
 
 def convert_chord_to_nashV(chord: str, key: str) -> str:
     """
@@ -48,59 +48,126 @@ def convert_chord_to_nashV(chord: str, key: str) -> str:
     #raise ValueError(f"Chord {chord} not recognized in the key of {key}.")
 def process_position(x:float, start_x:float, avg_width:float, length_of_lyrics:int) -> int:
     relativ_x = x - start_x
-    print(relativ_x)
-    print(avg_width)
-    print((relativ_x/avg_width))
-    print(length_of_lyrics)
-    if relativ_x > 0:
-        
+    if relativ_x > 0:   
         pos  = int((relativ_x/avg_width) * length_of_lyrics)
         return pos
     else:
         print('DEBUG ERROR: relativ_x is negative')
         return None
-    
 
-def process_ocr_result(ocr_result: List[Tuple], key:str, name_of_part:str) -> tuple[str,str]:
+from typing import List, Tuple
+
+def cluster_to_lines(ocr_result: List[Tuple], y_threshold: int = 10) -> List[List[int]]:
+    """
+    Groups OCR result bounding boxes into lines based on their y-coordinates.
+
+    Args:
+        ocr_result (List[Tuple]): OCR results containing bounding boxes and text.
+        y_threshold (int): Maximum vertical distance to consider for the same line.
+
+    Returns:
+        List[List[int]]: A list of lists where each sublist contains the indices of the OCR results in the same line.
+    """
+    lines = []
+    current_line = []
+    current_y = None
+
+    # Sort OCR results by the top-left `y` coordinate to ensure proper processing
+    sorted_results = sorted(enumerate(ocr_result[0]), key=lambda item: item[1][0][0][1])  # Sort by bbox top-left y
+
+    for i, line in sorted_results:
+        bbox, (text, confidence) = line
+        avg_y = sum([point[1] for point in bbox]) / 4  # Average y-coordinate of the bounding box
+
+        if current_y is None or abs(avg_y - current_y) < y_threshold:  # Same line
+            current_line.append(i)
+            current_y = avg_y
+        else:  # New line
+            lines.append(current_line)
+            current_line = [i]
+            current_y = avg_y
+
+    # Add the last line
+    if current_line:
+        lines.append(current_line)
+
+    return lines
+
+
+def process_ocr_result(ocr_result: list, key:str, name_of_part:str) -> tuple[str,str]:
     verse_data = []
-    current_line = {"lyrics": "", "chords": {}}
+    #current_line = {"lyrics": "", "chords": {}}
     _chord = None
     avg_x_pos_of_chord = None
     
-    for i, item in enumerate(ocr_result):
-        bbox, text, _prob = item    # I think _ is prob, but not sure
-        
-        x = bbox[0][0]   # Komplett falsch
-        if text == "VERSE" or text == "CHORUS" or text == "BRIDGE" or text == "OUTRO" or text == "INTRO":
-            continue   ## Kann man vielleicht noch erweitern, um auch "PRE-CHORUS" oder "PRE-CHORUS 1" zu erkennen
-        print(text)
-        if is_chord(text):
-            avg_x_pos_of_chord = sum(bbox[_][0] for _ in range(4)) / 4
-            _chord = convert_chord_to_nashV(text.replace('?', '').replace('_', ''), key)
-            #current_line["chords"][None] = str(_chord)
+
+    line_numbers = cluster_to_lines(ocr_result)
+
+    ### Maybe add a VERSE/CHORUS/BRIDGE/OUTRO/INTRO detection here
+
+    # For each line, check if it is a chord line or a lyric line
+    for i, line_nrs in enumerate(line_numbers): 
+        line_data = {}  
+        if all ([is_chord(ocr_result[0][nr][1][0]) for nr in line_nrs]):      # Is chordline
+            #print(f"Line {i} is a chord: {line_nrs} with data {[ocr_result[0][_][1][0] for _ in line_nrs ]}")
+            for nr in line_nrs:
+                bbox, (text, confidence) = ocr_result[0][nr]
+                avg_x_pos_of_chord = sum(bbox[_][0] for _ in range(4)) / 4
+                _chord = convert_chord_to_nashV(text.replace('?', '').replace('_', ''), key)
+                line_data[nr] = {'avg_x': avg_x_pos_of_chord, 'chord':_chord}
+            line_numbers[i] = {'type': 'chords' ,'data':line_data}
             
         else:
-            avg_width = sum([abs(bbox[1][0] - bbox[0][0]), abs(bbox[3][0] - bbox[2][0])]) / 2
-            print(avg_width)
-            print([abs(bbox[1][0] - bbox[0][0]), abs(bbox[3][0] - bbox[2][0])])
-            start_x = min(bbox[_][0] for _ in range(4))   # könnte auch einfach bbox[0][0] oder bbox[2][0] sein
-            if current_line["lyrics"]:
-                if avg_x_pos_of_chord:
-                    print(current_line["lyrics"])
-                    print(len(current_line["lyrics"]))
-                    processed_position = process_position(avg_x_pos_of_chord, start_x, avg_width, len(current_line["lyrics"]))
-                    current_line["chords"][processed_position] = _chord
-                verse_data.append(current_line)
-                current_line = {"lyrics": "", "chords": {}}
-                avg_x_pos_of_chord = None
-            current_line["lyrics"] += text + " "
-        print('_____')
+            #print(f"Line {i} is a lyric: {line_nrs} with data {[ocr_result[0][_][1][0] for _ in line_nrs ]}")
+            for nr in line_nrs:
+                bbox, (text, confidence) = ocr_result[0][nr]                                       # Is lyricline
+                avg_width = sum([abs(bbox[1][0] - bbox[0][0]), abs(bbox[3][0] - bbox[2][0])]) / 2
+                start_x = min(bbox[_][0] for _ in range(4))   # könnte auch einfach bbox[0][0] oder bbox[2][0] sein
+                line_data[nr] = {'start_x': start_x, 'avg_width': avg_width, 'text': text, }
+                
+            line_numbers[i] = {'type': 'lyrics' ,'data':line_data}
     
-    if current_line["lyrics"]:
-        verse_data.append(current_line)
     
-    for line in verse_data:
-        line["lyrics"] = line["lyrics"].strip()
-    print(verse_data)
+    ### Group into Lyrics and Chords pairs
+
+    ### get Position of Chords relative to Lyrics
+
     return (name_of_part, verse_data)
+
+
+
+
+
+    #for i, item in enumerate(ocr_result):
+    #    bbox, text, _prob = item    # I think _ is prob, but not sure
+    #    print(text)
+    #    x = bbox[0][0]   # Komplett falsch
+    #    if text == "VERSE" or text == "CHORUS" or text == "BRIDGE" or text == "OUTRO" or text == "INTRO":
+    #        continue   ## Kann man vielleicht noch erweitern, um auch "PRE-CHORUS" oder "PRE-CHORUS 1" zu erkennen
+    #    
+    #    if is_chord(text):
+    #        avg_x_pos_of_chord = sum(bbox[_][0] for _ in range(4)) / 4
+    #        _chord = convert_chord_to_nashV(text.replace('?', '').replace('_', ''), key)
+#
+    #        
+    #    else:
+    #        avg_width = sum([abs(bbox[1][0] - bbox[0][0]), abs(bbox[3][0] - bbox[2][0])]) / 2
+    #        start_x = min(bbox[_][0] for _ in range(4))   # könnte auch einfach bbox[0][0] oder bbox[2][0] sein
+    #        if current_line["lyrics"]:
+    #            if avg_x_pos_of_chord:
+    #                processed_position = process_position(avg_x_pos_of_chord, start_x, avg_width, len(current_line["lyrics"]))
+    #                current_line["chords"][processed_position] = _chord
+    #            verse_data.append(current_line)
+    #            current_line = {"lyrics": "", "chords": {}}
+    #            avg_x_pos_of_chord = None
+    #        current_line["lyrics"] += text + " "
+    #    
+    #
+    #if current_line["lyrics"]:
+    #    verse_data.append(current_line)
+    #
+    #for line in verse_data:
+    #    line["lyrics"] = line["lyrics"].strip()
+    #
+    #return (name_of_part, verse_data)
 
